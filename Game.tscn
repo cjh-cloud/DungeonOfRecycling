@@ -90,12 +90,12 @@ cell_custom_transform = Transform2D( 1, 0, 0, 1, 0, 0 )
 format = 1
 tile_data = PoolIntArray( 655416, 1, 0 )
 
-[node name="player" type="Sprite" parent="."]
+[node name="Player" type="Sprite" parent="."]
 position = Vector2( 226, 110 )
 texture = ExtResource( 5 )
 centered = false
 
-[node name="Camera2D" type="Camera2D" parent="player"]
+[node name="Camera2D" type="Camera2D" parent="Player"]
 position = Vector2( 16, 16 )
 current = true
 drag_margin_left = 0.0

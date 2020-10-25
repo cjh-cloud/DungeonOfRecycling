@@ -34,7 +34,40 @@ func _ready():
 	OS.set_window_size(Vector2(1280, 720))
 	randomize()
 	build_level()
-	
+
+# Handle key presses
+func _input(event):
+	if !event.is_pressed():
+		return
+
+	if event.is_action("Left"):
+		try_move(-1, 0)
+	elif event.is_action("Right"):
+		try_move(1, 0)
+	elif event.is_action("Up"):
+		try_move(0, -1)
+	elif event.is_action("Down"):
+		try_move(0, 1)
+
+func try_move(dx, dy):
+	var x = player_tile.x + dx
+	var y = player_tile.y + dy
+
+	# Assume tile is stone by default so we won't move outside map
+	var tile_type = Tile.Stone
+	if x >= 0 && x < level_size.x && y >= 0 && y < level_size.y:
+		tile_type = map[x][y]
+
+	match tile_type:
+		Tile.Floor:
+			player_tile = Vector2(x, y)
+
+		Tile.Door:
+			set_tile(x, y, Tile.Floor)
+
+	update_visuals()
+
+
 func build_level():
 	# Start with a blank map
 	rooms.clear()
@@ -58,6 +91,16 @@ func build_level():
 
 	connect_rooms()
 
+	# Place player
+	var start_room = rooms.front()
+	var player_x = start_room.position.x + 1 + randi() % int(start_room.size.x - 2)
+	var player_y = start_room.position.y + 1 + randi() % int(start_room.size.y - 2)
+	player_tile = Vector2(player_x, player_y)
+	update_visuals()
+
+func update_visuals():
+	player.position = player_tile * TILE_SIZE
+
 func connect_rooms():
 	# Build an AStar graph of the area where we can add corridors
 
@@ -74,7 +117,7 @@ func connect_rooms():
 					stone_graph.connect_points(point_id, left_point)
 
 				# Connect to above if also stone
-				if y > 0 && map[x][y -1] == Tile.Stone:
+				if y > 0 && map[x][y - 1] == Tile.Stone:
 					var above_point = stone_graph.get_closest_point(Vector3(x, y - 1, 0))
 					stone_graph.connect_points(point_id, above_point)
 
@@ -118,6 +161,9 @@ func add_random_connection(stone_graph, room_graph):
 
 	var path = stone_graph.get_point_path(closest_start_point, closest_end_point)
 	assert(path) # Shouldn't fail, but if it does we want to know
+
+	set_tile(start_position.x, start_position.y, Tile.Door)
+	set_tile(end_position.x, end_position.y, Tile.Door)
 
 	for position in path:
 		set_tile(position.x, position.y, Tile.Floor)
@@ -185,7 +231,7 @@ func pick_random_door_location(room):
 func add_room(free_regions):
 	var region = free_regions[randi() % free_regions.size()]
 
-	# How big to make the room
+	# How big to make the room - first go min, then add rand amount up till max size
 	var size_x = MIN_ROOM_DIMENSION
 	if region.size.x > MIN_ROOM_DIMENSION:
 		size_x += randi() % int(region.size.x - MIN_ROOM_DIMENSION)
