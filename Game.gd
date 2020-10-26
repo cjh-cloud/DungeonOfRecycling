@@ -10,19 +10,44 @@ const LEVEL_SIZES = [
 ]
 
 const LEVEL_ROOM_COUNTS = [5, 7, 9, 12, 15]
+const LEVEL_ENEMY_COUNTS = [5, 8, 12, 18, 26]
 const MIN_ROOM_DIMENSION = 5
 const MAX_ROOM_DIMENSION = 8
 
 enum Tile {Wall, Door, Floor, Ladder, Stone}
+
+const EnemyScene = preload("res://Enemy.tscn")
+
+class Enemy extends Reference:
+	var sprite_node
+	var tile
+	var full_hp
+	var hp
+	var dead = false
+
+	# Init func called when we create a new instance
+	func _init(game, enemy_level, x, y):
+		full_hp = 1 + enemy_level * 2
+		hp = full_hp
+		tile = Vector2(x, y)
+		sprite_node = EnemyScene.instance()
+		sprite_node.frame = enemy_level
+		sprite_node.position = tile * TILE_SIZE
+		game.add_child(sprite_node)
+
+	func remove():
+		sprite_node.queue_free()
 
 # Current Level -----------
 var level_num = 0
 var map = []
 var rooms = []
 var level_size
+var enemies = []
 
 # Node refs ---------------
 onready var tile_map = $TileMap
+onready var visibility_map = $VisibilityMap
 onready var player = $Player # $ references node by path?
 
 # Game State --------------
@@ -74,7 +99,7 @@ func try_move(dx, dy):
 				score += 1000
 				$CanvasLayer/Win.visible = true
 
-	update_visuals()
+	call_deferred("update_visuals")
 
 
 func build_level():
@@ -82,6 +107,10 @@ func build_level():
 	rooms.clear()
 	map.clear()
 	tile_map.clear()
+
+	for enemy in enemies:
+		enemy.remove()
+	enemies.clear()
 	
 	level_size = LEVEL_SIZES[level_num]
 	for x in range(level_size.y):
@@ -89,6 +118,7 @@ func build_level():
 		for y in range(level_size.y):
 			map[x].append(Tile.Stone)
 			tile_map.set_cell(x, y, Tile.Stone)
+			visibility_map.set_cell(x, y, 0)
 	
 	# Creating corridors and walls?
 	var free_regions = [Rect2(Vector2(2, 2), level_size - Vector2(4, 4))]
@@ -105,7 +135,25 @@ func build_level():
 	var player_x = start_room.position.x + 1 + randi() % int(start_room.size.x - 2)
 	var player_y = start_room.position.y + 1 + randi() % int(start_room.size.y - 2)
 	player_tile = Vector2(player_x, player_y)
-	update_visuals()
+	call_deferred("update_visuals") # Cos physics engine is in a different thread?
+
+	# Place enemies
+	var num_enemies = LEVEL_ENEMY_COUNTS[level_num]
+	for i in range(num_enemies):
+		var room = rooms[1 + randi() % (rooms.size() - 1)]
+		var x = room.position.x + 1 + randi() % int(room.size.x - 2)
+		var y = room.position.y + 1 + randi() % int(room.size.y - 2)
+
+		# Check an enemy isn't already in that tile
+		var blocked = false
+		for enemy in enemies:
+			if enemy.tile.x == x && enemy.tile.y == y:
+				blocked = true
+				break
+
+		if !blocked:
+			var enemy = Enemy.new(self, randi() % 2, x, y)
+			enemies.append(enemy)
 
 	# Place end ladder
 	var end_room = rooms.back()
@@ -117,6 +165,23 @@ func build_level():
 
 func update_visuals():
 	player.position = player_tile * TILE_SIZE
+	var player_center = tile_to_pixel_center(player_tile.x, player_tile.y)
+	var space_state = get_world_2d().direct_space_state
+	for x in range(level_size.x):
+		for y in range(level_size.y):
+			if visibility_map.get_cell(x, y) == 0:
+				# Offsetting for center of the tile - explained at 22:48 in vid
+				var x_dir = 1 if x < player_tile.x else -1
+				var y_dir = 1 if y < player_tile.y else -1
+				var test_point = tile_to_pixel_center(x, y) + Vector2(x_dir, y_dir) * TILE_SIZE / 2
+
+				# Raycasting!
+				var occlusion = space_state.intersect_ray(player_center, test_point)
+				if !occlusion || (occlusion.position - test_point).length() < 1:
+					visibility_map.set_cell(x, y, -1)
+
+func tile_to_pixel_center(x, y):
+	return Vector2((x + 0.5) * TILE_SIZE, (y + 0.5) * TILE_SIZE)
 
 func connect_rooms():
 	# Build an AStar graph of the area where we can add corridors
