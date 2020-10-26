@@ -11,12 +11,35 @@ const LEVEL_SIZES = [
 
 const LEVEL_ROOM_COUNTS = [5, 7, 9, 12, 15]
 const LEVEL_ENEMY_COUNTS = [5, 8, 12, 18, 26]
+const LEVEL_ITEM_COUNTS = [2, 4, 6, 8, 10]
 const MIN_ROOM_DIMENSION = 5
 const MAX_ROOM_DIMENSION = 8
+const PLAYER_START_HP = 5
 
 enum Tile {Wall, Door, Floor, Ladder, Stone}
 
 const EnemyScene = preload("res://Enemy.tscn")
+const PotScene = preload("res://Pot.tscn") # Can
+const KfcScene = preload("res://Kfc.tscn") # Paper
+
+const POT_FUNCTIONS = ["impair_vision", "heal_over_time", "poison"]
+
+class Item extends Reference:
+	var sprite_node
+	var tile
+	var is_kfc
+
+	func _init(game, x, y, is_kfc):
+		self.is_kfc = is_kfc
+		tile = Vector2(x, y)
+		sprite_node = KfcScene.instance() if is_kfc else  PotScene.instance()
+		sprite_node.frame = randi() % sprite_node.hframes
+		sprite_node.position = tile * TILE_SIZE
+		sprite_node.offset = Vector2(randi() % 12 - 6, randi() % 12 - 6)
+		game.add_child(sprite_node)
+
+	func remove():
+		sprite_node.queue_free()
 
 class Enemy extends Reference:
 	var sprite_node
@@ -49,12 +72,47 @@ class Enemy extends Reference:
 			dead = true
 			game.score += 10 * full_hp
 
+			# Drop kfc
+			for i in range(randi() % (full_hp)):
+				game.items.append(Item.new(game, tile.x, tile.y, true)) # true is kfc
+
+			# Drop pots
+			for i in range(randi() % 3):
+				game.items.append(Item.new(game, tile.x, tile.y, false)) # false is pots
+
+
+	func act(game):
+		if !sprite_node.visible: # If we can't see the enemy, they can't see us
+			return
+
+		# Using Vector3 cos Godot's AStar Pathfinding uses 3D Vectors to allow for 3D
+		var my_point = game.enemy_pathfinding.get_closest_point(Vector3(tile.x, tile.y, 0))
+		var player_point = game.enemy_pathfinding.get_closest_point(Vector3(game.player_tile.x, game.player_tile.y, 0))
+		var path = game.enemy_pathfinding.get_point_path(my_point, player_point)
+		if path:
+			assert(path.size() > 1) # Enemy should not be in same tile as player
+			var move_tile = Vector2(path[1].x, path[1].y)
+
+			if move_tile == game.player_tile: # If next to player, attack player
+				game.damage_player(1)
+			else:
+				var blocked = false
+				for enemy in game.enemies:
+					if enemy.tile == move_tile:
+						blocked = true
+						break
+
+				if !blocked:
+					tile = move_tile
+
 # Current Level -----------
 var level_num = 0
 var map = []
 var rooms = []
 var level_size
 var enemies = []
+var items = []
+var pot_types
 
 # Node refs ---------------
 onready var tile_map = $TileMap
@@ -64,6 +122,11 @@ onready var player = $Player # $ references node by path?
 # Game State --------------
 var player_tile
 var score = 0
+var enemy_pathfinding
+var player_hp = PLAYER_START_HP
+var impaired_turns = 0
+var healing_turns = 0
+var poison_turns = 0
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
@@ -108,6 +171,7 @@ func try_move(dx, dy):
 			
 			if !blocked:
 				player_tile = Vector2(x, y)
+				pickup_items()
 
 		Tile.Door:
 			set_tile(x, y, Tile.Floor)
@@ -121,8 +185,56 @@ func try_move(dx, dy):
 				score += 1000
 				$CanvasLayer/Win.visible = true
 
+	for enemy in enemies:
+		enemy.act(self)
+
+	if impaired_turns > 0:
+		impaired_turns -= 1
+		if impaired_turns == 0:
+			$CanvasLayer/Impaired.visible = false
+			$Player/Impairment.visible = false
+
+	if poison_turns > 0:
+		poison_turns -= 1
+		damage_player(1)
+		if poison_turns == 0:
+			$CanvasLayer/Poisoned.visible = false
+
+	if healing_turns > 0:
+		healing_turns -= 1
+		player_hp += 2
+		if healing_turns == 0:
+			$CanvasLayer/Healing.visible = false
+
 	call_deferred("update_visuals")
 
+func pickup_items():
+	var remove_queue = []
+	for item in items:
+		if item.tile == player_tile:
+			if item.is_kfc:
+				player_hp += 2
+				score += 1
+			else:
+				call(pot_types[item.sprite_node.frame])
+			item.remove()
+			remove_queue.append(item)
+
+	for item in remove_queue:
+		items.erase(item)
+
+func impair_vision():
+	impaired_turns = 10
+	$CanvasLayer/Impaired.visible = true
+	$Player/Impairment.visible = true
+
+func heal_over_time():
+	healing_turns = 3
+	$CanvasLayer/Healing.visible = true
+
+func posion():
+	poison_turns = 3
+	$CanvasLayer/Poisoned.visible = true
 
 func build_level():
 	# Start with a blank map
@@ -133,7 +245,17 @@ func build_level():
 	for enemy in enemies:
 		enemy.remove()
 	enemies.clear()
-	
+
+	for item in items:
+		item.remove()
+	items.clear()
+
+	enemy_pathfinding = AStar.new()
+
+	# Randomize pot effects
+	pot_types = POT_FUNCTIONS.duplicate()
+	pot_types.shuffle()
+
 	level_size = LEVEL_SIZES[level_num]
 	for x in range(level_size.y):
 		map.append([])
@@ -157,7 +279,6 @@ func build_level():
 	var player_x = start_room.position.x + 1 + randi() % int(start_room.size.x - 2)
 	var player_y = start_room.position.y + 1 + randi() % int(start_room.size.y - 2)
 	player_tile = Vector2(player_x, player_y)
-	call_deferred("update_visuals") # Cos physics engine is in a different thread?
 
 	# Place enemies
 	var num_enemies = LEVEL_ENEMY_COUNTS[level_num]
@@ -177,6 +298,16 @@ func build_level():
 			var enemy = Enemy.new(self, randi() % 2, x, y)
 			enemies.append(enemy)
 
+	# Place items
+	var num_items = LEVEL_ITEM_COUNTS[level_num]
+	for i in range(num_items):
+		var room = rooms[randi() % (rooms.size())]
+		var x = room.position.x + 1 + randi() % int(room.size.x - 2)
+		var y = room.position.y + 1 + randi() % int(room.size.y - 2)
+		items.append(Item.new(self, x, y, randi() % 2 == 0))
+
+	call_deferred("update_visuals") # Cos physics engine is in a different thread?
+
 	# Place end ladder
 	var end_room = rooms.back()
 	var ladder_x = end_room.position.x + 1 + randi() % int(end_room.size.x - 2)
@@ -184,6 +315,24 @@ func build_level():
 	set_tile(ladder_x, ladder_y, Tile.Ladder)
 
 	$CanvasLayer/Level.text = "Level: " + str(level_num)
+
+func clear_path(tile):
+	var new_point = enemy_pathfinding.get_available_point_id()
+	enemy_pathfinding.add_point(new_point, Vector3(tile.x, tile.y, 0))
+	var points_to_connect = []
+
+	# Creating connections? approx 31:00 in vid
+	if tile.x > 0 && map[tile.x - 1][tile.y] == Tile.Floor:
+		points_to_connect.append(enemy_pathfinding.get_closest_point(Vector3(tile.x - 1, tile.y, 0)))
+	if tile.y > 0 && map[tile.x][tile.y - 1] == Tile.Floor:
+		points_to_connect.append(enemy_pathfinding.get_closest_point(Vector3(tile.x, tile.y - 1, 0)))
+	if tile.x < level_size.x - 1 && map[tile.x + 1][tile.y] == Tile.Floor:
+		points_to_connect.append(enemy_pathfinding.get_closest_point(Vector3(tile.x + 1, tile.y, 0)))
+	if tile.y < level_size.y - 1 && map[tile.x][tile.y + 1] == Tile.Floor:
+		points_to_connect.append(enemy_pathfinding.get_closest_point(Vector3(tile.x, tile.y + 1, 0)))
+
+	for point in points_to_connect:
+		enemy_pathfinding.connect_points(point, new_point)
 
 func update_visuals():
 	player.position = player_tile * TILE_SIZE
@@ -202,6 +351,23 @@ func update_visuals():
 				if !occlusion || (occlusion.position - test_point).length() < 1:
 					visibility_map.set_cell(x, y, -1)
 
+	for enemy in enemies:
+		enemy.sprite_node.position = enemy.tile * TILE_SIZE
+		if !enemy.sprite_node.visible:
+			var enemy_center = tile_to_pixel_center(enemy.tile.x, enemy.tile.y)
+			var occlusion = space_state.intersect_ray(player_center, enemy_center)
+			if !occlusion:
+				enemy.sprite_node.visible = true
+
+	for item in items:
+		item.sprite_node.position = item.tile * TILE_SIZE
+		if !item.sprite_node.visible:
+			var item_center = tile_to_pixel_center(item.tile.x, item.tile.y)
+			var occlusion = space_state.intersect_ray(player_center, item_center)
+			if !occlusion:
+				item.sprite_node.visible = true
+
+	$CanvasLayer/HP.text = "HP: " + str(player_hp)
 	$CanvasLayer/Score.text = "Score: " + str(score)
 
 func tile_to_pixel_center(x, y):
@@ -410,8 +576,26 @@ func set_tile(x, y, type):
 	map[x][y] = type
 	tile_map.set_cell(x, y, type)
 
+	if type == Tile.Floor:
+		clear_path(Vector2(x, y))
+
+func damage_player(dmg):
+	player_hp = max(0, player_hp - dmg)
+	if player_hp == 0:
+		$CanvasLayer/Lose.visible = true
+
 func _on_Button_pressed():
 	level_num = 0
 	score = 0
 	build_level()
 	$CanvasLayer/Win.visible = false
+	$CanvasLayer/Lose.visible = false
+	player_hp = PLAYER_START_HP
+
+	impaired_turns = 0
+	healing_turns = 0
+	poison_turns = 0
+	$CanvasLayer/Impaired.visible = false
+	$Player/Impairment.visible = false
+	$CanvasLayer/Healing.visible = false
+	$CanvasLayer/Poisoned.visible = false

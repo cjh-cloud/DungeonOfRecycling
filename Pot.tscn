@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=2]
+
+[ext_resource path="res://art/pot.png" type="Texture" id=1]
+
+[node name="Pot" type="Sprite"]
+visible = false
+position = Vector2( 128, 160 )
+texture = ExtResource( 1 )
+centered = false
+hframes = 3

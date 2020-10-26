@@ -1,4 +1,4 @@
-[gd_scene load_steps=20 format=2]
+[gd_scene load_steps=21 format=2]
 
 [ext_resource path="res://art/wall.png" type="Texture" id=1]
 [ext_resource path="res://art/ground.png" type="Texture" id=2]
@@ -9,6 +9,7 @@
 [ext_resource path="res://Game.gd" type="Script" id=7]
 [ext_resource path="res://art/black.png" type="Texture" id=8]
 [ext_resource path="res://Enemy.tscn" type="PackedScene" id=9]
+[ext_resource path="res://art/light.png" type="Texture" id=10]
 
 [sub_resource type="ConvexPolygonShape2D" id=3]
 points = PoolVector2Array( 0, 0, 32, 0, 32, 32, 0, 32 )
@@ -203,9 +204,16 @@ drag_margin_top = 0.0
 drag_margin_right = 0.0
 drag_margin_bottom = 0.0
 
+[node name="Impairment" type="Light2D" parent="Player"]
+visible = false
+position = Vector2( 16, 16 )
+texture = ExtResource( 10 )
+mode = 3
+
 [node name="CanvasLayer" type="CanvasLayer" parent="."]
 
 [node name="ColorRect" type="ColorRect" parent="CanvasLayer"]
+light_mask = 0
 margin_right = 512.0
 margin_bottom = 34.0
 color = Color( 0.101961, 0.101961, 0.101961, 0.713726 )
@@ -214,6 +222,7 @@ __meta__ = {
 }
 
 [node name="Level" type="Label" parent="CanvasLayer"]
+light_mask = 0
 margin_left = 32.0
 margin_right = 98.0
 margin_bottom = 34.0
@@ -223,7 +232,47 @@ __meta__ = {
 "_edit_use_anchors_": false
 }
 
+[node name="Healing" type="Label" parent="CanvasLayer"]
+visible = false
+light_mask = 0
+margin_left = 224.0
+margin_top = 256.0
+margin_right = 290.0
+margin_bottom = 290.0
+text = "Healing"
+valign = 1
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="Poisoned" type="Label" parent="CanvasLayer"]
+visible = false
+light_mask = 0
+margin_left = 352.0
+margin_top = 256.0
+margin_right = 418.0
+margin_bottom = 290.0
+text = "Poisoned"
+valign = 1
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="Impaired" type="Label" parent="CanvasLayer"]
+visible = false
+light_mask = 0
+margin_left = 64.0
+margin_top = 256.0
+margin_right = 130.0
+margin_bottom = 290.0
+text = "Vision Impaired"
+valign = 1
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
 [node name="HP" type="Label" parent="CanvasLayer"]
+light_mask = 0
 margin_left = 160.0
 margin_right = 226.0
 margin_bottom = 34.0
@@ -234,6 +283,7 @@ __meta__ = {
 }
 
 [node name="Score" type="Label" parent="CanvasLayer"]
+light_mask = 0
 margin_left = 256.0
 margin_right = 322.0
 margin_bottom = 34.0
@@ -245,6 +295,7 @@ __meta__ = {
 
 [node name="Win" type="ColorRect" parent="CanvasLayer"]
 visible = false
+light_mask = 0
 margin_top = 34.0
 margin_right = 512.0
 margin_bottom = 320.0
@@ -254,6 +305,7 @@ __meta__ = {
 }
 
 [node name="Label" type="Label" parent="CanvasLayer/Win"]
+light_mask = 0
 margin_left = 192.0
 margin_top = 62.0
 margin_right = 320.0
@@ -265,6 +317,38 @@ __meta__ = {
 }
 
 [node name="Button" type="Button" parent="CanvasLayer/Win"]
+light_mask = 0
+margin_left = 192.0
+margin_top = 108.0
+margin_right = 320.0
+margin_bottom = 138.0
+text = "Restart"
+
+[node name="Lose" type="ColorRect" parent="CanvasLayer"]
+visible = false
+light_mask = 0
+margin_top = 34.0
+margin_right = 512.0
+margin_bottom = 320.0
+color = Color( 0.27451, 0, 0, 0.701961 )
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="Label" type="Label" parent="CanvasLayer/Lose"]
+light_mask = 0
+margin_left = 192.0
+margin_top = 62.0
+margin_right = 320.0
+margin_bottom = 94.0
+text = "Game Over UwU"
+align = 1
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="Button" type="Button" parent="CanvasLayer/Lose"]
+light_mask = 0
 margin_left = 192.0
 margin_top = 108.0
 margin_right = 320.0
@@ -273,3 +357,4 @@ text = "Restart"
 
 [node name="Enemy" parent="." instance=ExtResource( 9 )]
 [connection signal="pressed" from="CanvasLayer/Win/Button" to="." method="_on_Button_pressed"]
+[connection signal="pressed" from="CanvasLayer/Lose/Button" to="." method="_on_Button_pressed"]
