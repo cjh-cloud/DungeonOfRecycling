@@ -8,7 +8,7 @@ texture = ExtResource( 1 )
 centered = false
 hframes = 2
 
-[node name="ColorRect" type="ColorRect" parent="."]
+[node name="HPBar" type="ColorRect" parent="."]
 margin_top = -4.0
 margin_right = 32.0
 margin_bottom = -2.0

@@ -38,6 +38,17 @@ class Enemy extends Reference:
 	func remove():
 		sprite_node.queue_free()
 
+	func take_damage(game, dmg):
+		if dead:
+			return
+
+		hp = max(0, hp - dmg)
+		sprite_node.get_node("HPBar").rect_size.x = TILE_SIZE * hp / full_hp # Change HP bar width
+
+		if hp == 0:
+			dead = true
+			game.score += 10 * full_hp
+
 # Current Level -----------
 var level_num = 0
 var map = []
@@ -85,7 +96,18 @@ func try_move(dx, dy):
 
 	match tile_type:
 		Tile.Floor:
-			player_tile = Vector2(x, y)
+			var blocked = false
+			for enemy in enemies:
+				if enemy.tile.x == x && enemy.tile.y == y:
+					enemy.take_damage(self, 1)
+					if enemy.dead:
+						enemy.remove()
+						enemies.erase(enemy)
+					blocked = true
+					break
+			
+			if !blocked:
+				player_tile = Vector2(x, y)
 
 		Tile.Door:
 			set_tile(x, y, Tile.Floor)
@@ -179,6 +201,8 @@ func update_visuals():
 				var occlusion = space_state.intersect_ray(player_center, test_point)
 				if !occlusion || (occlusion.position - test_point).length() < 1:
 					visibility_map.set_cell(x, y, -1)
+
+	$CanvasLayer/Score.text = "Score: " + str(score)
 
 func tile_to_pixel_center(x, y):
 	return Vector2((x + 0.5) * TILE_SIZE, (y + 0.5) * TILE_SIZE)
