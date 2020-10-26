@@ -65,6 +65,15 @@ func try_move(dx, dy):
 		Tile.Door:
 			set_tile(x, y, Tile.Floor)
 
+		Tile.Ladder:
+			level_num += 1
+			score += 20
+			if level_num < LEVEL_SIZES.size():
+				build_level()
+			else:
+				score += 1000
+				$CanvasLayer/Win.visible = true
+
 	update_visuals()
 
 
@@ -97,6 +106,14 @@ func build_level():
 	var player_y = start_room.position.y + 1 + randi() % int(start_room.size.y - 2)
 	player_tile = Vector2(player_x, player_y)
 	update_visuals()
+
+	# Place end ladder
+	var end_room = rooms.back()
+	var ladder_x = end_room.position.x + 1 + randi() % int(end_room.size.x - 2)
+	var ladder_y = end_room.position.y + 1 + randi() % int(end_room.size.y - 2)
+	set_tile(ladder_x, ladder_y, Tile.Ladder)
+
+	$CanvasLayer/Level.text = "Level: " + str(level_num)
 
 func update_visuals():
 	player.position = player_tile * TILE_SIZE
@@ -304,3 +321,8 @@ func set_tile(x, y, type):
 	map[x][y] = type
 	tile_map.set_cell(x, y, type)
 
+func _on_Button_pressed():
+	level_num = 0
+	score = 0
+	build_level()
+	$CanvasLayer/Win.visible = false
